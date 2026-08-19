@@ -1,0 +1,13 @@
+function taoLinkVaChuyenTrang() {
+    const duLieu = {
+        msg: "Chúc mừng sinh nhật!",
+        theme: "pink",
+        music: "https://youtu.be/abc"
+    };
+
+    // Mã hóa dữ liệu thành chuỗi Base64
+    const encodedData = btoa(encodeURIComponent(JSON.stringify(duLieu)));
+
+    // Chuyển hướng sang trang nhận (nhan-thiep.html)
+    window.location.href = `nhan-thiep.html?data=${encodedData}`;
+}
