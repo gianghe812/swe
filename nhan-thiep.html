@@ -1,15 +1,282 @@
-window.onload = function() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const encodedData = urlParams.get('data');
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Có một thông điệp dành cho bạn</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Quicksand:wght@500;600;700&family=Caveat:wght@600;700&family=Pacifico&display=swap" rel="stylesheet">
 
-    if (encodedData) {
-        // Giải mã dữ liệu
-        const duLieu = JSON.parse(decodeURIComponent(atob(encodedData)));
+    <style>
+        *, *::before, *::after { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #0f0c13; font-family: 'Quicksand', sans-serif; color: #fff; display: flex; justify-content: center; align-items: center; }
 
-        console.log("Lời nhắn:", duLieu.msg);
-        console.log("Giao diện:", duLieu.theme);
+        #receiver-view { position: fixed; inset: 0; display: flex; justify-content: center; align-items: center; flex-direction: column; overflow: hidden; }
+
+        /* Màn hình đếm ngược (nếu có hẹn giờ) */
+        .rv-wait-screen { text-align: center; z-index: 10; display: none; flex-direction: column; align-items: center; padding: 30px; }
+        .rv-icon { font-size: 60px; margin-bottom: 20px; animation: floatIcon 3s ease-in-out infinite; }
+        @keyframes floatIcon { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-15px)} }
+        .rv-title { font-size: 24px; font-weight: 700; margin-bottom: 10px; }
+        .rv-status-text { font-size: 16px; color: #ff8fa3; font-weight: 600; }
+
+        /* Khung hiển thị thiệp */
+        #rv-dynamic-container { display: flex; position: relative; width: 100%; height: 100%; justify-content: center; align-items: center; perspective: 1500px; }
+
+        /* Hướng dẫn chạm để mở */
+        #rv-hint { position: absolute; top: 15%; color: #ff4d6d; font-size: 20px; font-weight: bold; animation: bounceHint 1.5s infinite; z-index: 50; pointer-events: none; }
+        @keyframes bounceHint { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+
+        /* 1. PHONG BÌ RÚT (ENVELOPE) - CHUẨN GỐC */
+        .rv-style-env { width: 320px; height: 210px; position: relative; perspective: 1000px; cursor: pointer; transition: transform 0.4s; filter: drop-shadow(0 15px 25px rgba(0,0,0,0.5)); margin-top: 50px; }
+        .rv-style-env:not(.is-open):hover { transform: translateY(-8px) scale(1.03); }
+        .rv-ec-back { position: absolute; inset: 0; border-radius: 0 0 12px 12px; z-index: 1; }
+        .rv-ec-paper { position: absolute; left: 12px; right: 12px; top: 12px; bottom: 12px; z-index: 2; overflow: hidden; border-radius: 4px; box-shadow: 0 0 15px rgba(0,0,0,0.2); transition: transform 1s cubic-bezier(0.25, 0.8, 0.25, 1); }
+        .rv-ec-front { position: absolute; bottom: 0; left: 0; z-index: 3; width: 0; height: 0; border-radius: 0 0 12px 12px; pointer-events: none; }
+        .rv-ec-flap { position: absolute; top: 0; left: 0; z-index: 4; width: 0; height: 0; transform-origin: top; transition: transform 0.6s ease; pointer-events: none; }
         
-        // Hiển thị lời nhắn lên giao diện
-        document.getElementById('noi-dung').innerText = duLieu.msg;
-    }
-};
+        .rv-style-env.is-open { cursor: default; }
+        .rv-style-env.is-open .rv-ec-flap { transform: rotateX(180deg); z-index: 1; }
+        .rv-style-env.is-open .rv-ec-paper { transform: translateY(-130px) scale(1.1); z-index: 5; height: 340px; box-shadow: 0 -5px 20px rgba(0,0,0,0.3); }
+
+        /* 2. SỔ LẬT 3D (BOOK) */
+        .rv-style-book { width: 320px; height: 420px; position: relative; perspective: 1500px; cursor: pointer; transform-style: preserve-3d; transition: transform 0.8s cubic-bezier(0.25, 0.8, 0.25, 1); filter: drop-shadow(0 15px 25px rgba(0,0,0,0.5)); }
+        .rv-style-book:not(.is-open):hover { transform: translateY(-6px) scale(1.02); }
+        .rv-bc-inside { position: absolute; inset: 0; border-radius: 5px 15px 15px 5px; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.5); }
+        .rv-bc-cover { position: absolute; inset: 0; border-radius: 5px 15px 15px 5px; transform-origin: left; transition: transform 1.5s cubic-bezier(0.25, 0.8, 0.25, 1); border-left: 16px solid rgba(0,0,0,0.4); z-index: 5; overflow: hidden; box-shadow: 5px 5px 20px rgba(0,0,0,0.4); }
+        .rv-style-book.is-open { transform: translateX(30px) scale(1.05); cursor: default; }
+        .rv-style-book.is-open .rv-bc-cover { transform: rotateY(-140deg); box-shadow: 20px 0 30px rgba(0,0,0,0.3); }
+
+        /* 3. THIỆP PHẲNG (FLAT) */
+        .rv-style-flat { width: 320px; height: 420px; border-radius: 20px; position: relative; cursor: pointer; transform-style: preserve-3d; transition: transform 1.2s cubic-bezier(0.25, 0.8, 0.25, 1); box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
+        .rv-style-flat:not(.is-open):hover { transform: translateY(-6px) scale(1.02); }
+        .rv-fc-front, .rv-fc-back { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 20px; overflow: hidden; }
+        .rv-fc-back { transform: rotateY(180deg); }
+        .rv-style-flat.is-open { transform: rotateY(-180deg) scale(1.08); cursor: default; }
+
+        /* Đối tượng vẽ chữ */
+        .rv-layer-text { position: absolute; transform-origin: center; z-index: 2; line-height: 1.4; display: flex; flex-direction: column; justify-content: center; }
+        .cursor-typing { border-right: 2px solid var(--mau-chu-dao); animation: blink 0.7s infinite; padding-right: 2px; }
+        @keyframes blink { 50% { border-color: transparent; } }
+
+        /* Mưa pháo hoa */
+        .ct-confetti { position: absolute; top: -10px; width: 10px; height: 10px; z-index: 100005; animation: fallConfetti linear forwards; }
+        @keyframes fallConfetti { to { transform: translateY(100vh) rotate(720deg); } }
+
+        @media (min-width: 768px) {
+            .rv-style-flat { width: 360px; height: 480px; }
+            .rv-style-book { width: 360px; height: 480px; }
+            .rv-style-env { transform: scale(1.2); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="receiver-view">
+        <div class="rv-wait-screen" id="rv-wait">
+            <div class="rv-icon">💌</div>
+            <div class="rv-title">Có một thông điệp dành cho bạn</div>
+            <div class="rv-status-text" id="rv-status-text">Đang chờ thời khắc mở...</div>
+        </div>
+
+        <div id="rv-hint">Chạm vào thiệp để mở 👆</div>
+        <div id="rv-dynamic-container"></div>
+
+        <audio id="rv-audio"></audio>
+        <div id="rv-yt-container" style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;"></div>
+    </div>
+
+    <script>
+        let cardData = null;
+        let isOpened = false;
+
+        function extractVideoID(url) {
+            let regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/)|youtu\.be\/)([^"&?\/\s]{11})/i;
+            let match = url.match(regExp);
+            return (match && match[1].length === 11) ? match[1] : null;
+        }
+
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const rawData = urlParams.get('data');
+
+            if (!rawData) {
+                document.getElementById('rv-dynamic-container').innerHTML = `<p style="color:#aaa;">Không tìm thấy nội dung thiệp!</p>`;
+                return;
+            }
+
+            try {
+                cardData = JSON.parse(decodeURIComponent(atob(rawData)));
+            } catch(e) {
+                document.getElementById('rv-dynamic-container').innerHTML = `<p style="color:#ff4d6d;">Dữ liệu thiệp bị lỗi!</p>`;
+                return;
+            }
+
+            // Xử lý Hẹn giờ
+            if (cardData.timeType === 'later' && cardData.datetime) {
+                const target = new Date(cardData.datetime).getTime();
+                const now = new Date().getTime();
+
+                if (target > now) {
+                    document.getElementById('rv-wait').style.display = 'flex';
+                    document.getElementById('rv-hint').style.display = 'none';
+                    document.getElementById('rv-dynamic-container').style.display = 'none';
+
+                    const timer = setInterval(() => {
+                        const cur = new Date().getTime();
+                        const dist = target - cur;
+                        if (dist > 0) {
+                            const d = Math.floor(dist / (1000 * 60 * 60 * 24));
+                            const h = Math.floor((dist % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                            const m = Math.floor((dist % (1000 * 60 * 60)) / (1000 * 60));
+                            const s = Math.floor((dist % (1000 * 60)) / 1000);
+                            document.getElementById('rv-status-text').innerText = `Còn ${d} ngày ${h} giờ ${m} phút ${s} giây nữa`;
+                        } else {
+                            clearInterval(timer);
+                            document.getElementById('rv-wait').style.display = 'none';
+                            document.getElementById('rv-hint').style.display = 'block';
+                            document.getElementById('rv-dynamic-container').style.display = 'flex';
+                            renderCard();
+                        }
+                    }, 1000);
+                    return;
+                }
+            }
+
+            // Không hẹn giờ: Hiển thị ngay
+            renderCard();
+        };
+
+        function renderCard() {
+            const container = document.getElementById('rv-dynamic-container');
+            const cType = cardData.cardStyle || 'env';
+
+            // Màu vỏ ngoài
+            const themeO = cardData.themeOutside || 'red';
+            let bgO = 'linear-gradient(135deg, #ff4d6d, #590d22)';
+            let pbBack = '#ff8fa3', pbFront = '#ffb3c6', pbBot = '#ffc2d1', pbFlap = '#ff758f';
+
+            if (themeO === 'black') {
+                bgO = 'linear-gradient(135deg, #111, #333)';
+                pbBack = '#222'; pbFront = '#333'; pbBot = '#111'; pbFlap = '#444';
+            } else if (themeO === 'blue') {
+                bgO = 'linear-gradient(135deg, #1a2a6c, #112240)';
+                pbBack = '#1a2a6c'; pbFront = '#234a9b'; pbBot = '#0d1b33'; pbFlap = '#2a5cb1';
+            } else if (themeO === 'pink') {
+                bgO = 'linear-gradient(135deg, #ff758c, #ff7eb3)';
+                pbBack = '#ff8fa3'; pbFront = '#ffb3c6'; pbBot = '#ffc2d1'; pbFlap = '#ff758f';
+            }
+
+            // Màu lõi trong
+            const themeI = cardData.themeInside || 'classic';
+            let bgI = 'linear-gradient(135deg, #251620, #1a1016)';
+            if (themeI === 'vintage') bgI = '#d2b48c';
+            else if (themeI === 'pink') bgI = '#ffe4e1';
+            else if (themeI === 'galaxy') bgI = 'radial-gradient(circle, #2b1055, #7597de)';
+
+            // Định dạng Text bên trong
+            const tState = cardData.textState || { x: 160, y: 190, w: 260, fsize: 26, rot: 0 };
+            const cState = cardData.coverTextState || { x: 160, y: 190, w: 260, fsize: 35, rot: 0 };
+            
+            const font = cardData.font || "'Dancing Script', cursive";
+            const align = cardData.align || "center";
+            const col = cardData.color || "#ffccd5";
+            const eff = cardData.effect || "none";
+            let txtShadow = 'none'; let fWeight = 'normal';
+            if (eff === 'shadow') txtShadow = '2px 2px 4px rgba(0,0,0,0.6)';
+            else if (eff === 'glow') txtShadow = `0 0 10px ${col}, 0 0 20px ${col}`;
+            else if (eff === 'bold') fWeight = '800';
+
+            const insideTextStyles = `font-family:${font}; text-align:${align}; font-size:${tState.fsize}px; color:${col}; text-shadow:${txtShadow}; font-weight:${fWeight}; width:${tState.w}px; left:${tState.x}px; top:${tState.y}px; transform: translate(-50%, -50%) rotate(${tState.rot}deg);`;
+            const coverTextStyles = `font-family:'Dancing Script', cursive; font-size:${cState.fsize}px; color:#fff; text-shadow:0 2px 10px rgba(0,0,0,0.5); text-align:center; width:${cState.w}px; left:${cState.x}px; top:${cState.y}px; transform: translate(-50%, -50%) rotate(${cState.rot}deg);`;
+
+            if (cType === 'book') {
+                container.innerHTML = `
+                    <div class="rv-style-book" id="rv-card-element" onclick="openCard()">
+                        <div class="rv-bc-inside" style="background:${bgI}">
+                            <div class="rv-layer-text" id="rv-target-text" style="${insideTextStyles}"></div>
+                        </div>
+                        <div class="rv-bc-cover" style="background:${bgO}">
+                            <div class="rv-layer-text" style="${coverTextStyles}">${cardData.coverText || "For You"}</div>
+                        </div>
+                    </div>
+                `;
+            } else if (cType === 'env') {
+                container.innerHTML = `
+                    <div class="rv-style-env" id="rv-card-element" onclick="openCard()">
+                        <div class="rv-ec-back" style="background:${pbBack}"></div>
+                        <div class="rv-ec-paper" style="background:${bgI}">
+                            <div class="rv-layer-text" id="rv-target-text" style="${insideTextStyles}"></div>
+                        </div>
+                        <div class="rv-ec-front" style="border-bottom:115px solid ${pbBot}; border-left:160px solid ${pbFront}; border-right:160px solid ${pbFront}; border-top:95px solid transparent;"></div>
+                        <div class="rv-ec-flap" style="border-top:120px solid ${pbFlap}; border-left:160px solid transparent; border-right:160px solid transparent; border-bottom:90px solid transparent;"></div>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="rv-style-flat" id="rv-card-element" onclick="openCard()">
+                        <div class="rv-fc-front" style="background:${bgO}; display:flex; align-items:center; justify-content:center;">
+                            <div class="rv-layer-text" style="${coverTextStyles}">${cardData.coverText || "For You"}</div>
+                        </div>
+                        <div class="rv-fc-back" style="background:${bgI}">
+                            <div class="rv-layer-text" id="rv-target-text" style="${insideTextStyles}"></div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function openCard() {
+            if (isOpened) return;
+            isOpened = true;
+
+            document.getElementById('rv-hint').style.display = 'none';
+            const cardEl = document.getElementById('rv-card-element');
+            cardEl.classList.add('is-open');
+
+            // Xử lý Phát nhạc
+            if (cardData.musicType === 'yt' && cardData.musicYt) {
+                const vidId = extractVideoID(cardData.musicYt);
+                if (vidId) {
+                    document.getElementById('rv-yt-container').innerHTML = `<iframe width="1" height="1" src="https://www.youtube.com/embed/${vidId}?autoplay=1&controls=0" frameborder="0" allow="autoplay"></iframe>`;
+                }
+            }
+
+            // Bắn pháo hoa & chạy chữ
+            setTimeout(() => {
+                fireConfetti();
+                const targetText = document.getElementById('rv-target-text');
+                typeWriter(targetText, cardData.message || "Gửi em...");
+            }, 800);
+        }
+
+        function typeWriter(el, text) {
+            el.innerHTML = '';
+            el.classList.add('cursor-typing');
+            let i = 0;
+            const timer = setInterval(() => {
+                if (i < text.length) {
+                    if (text.substr(i, 1) === '\n') el.innerHTML += '<br>';
+                    else el.innerHTML += text.charAt(i);
+                    i++;
+                } else {
+                    clearInterval(timer);
+                    el.classList.remove('cursor-typing');
+                }
+            }, 35);
+        }
+
+        function fireConfetti() {
+            for (let i = 0; i < 60; i++) {
+                const conf = document.createElement('div');
+                conf.className = 'ct-confetti';
+                conf.style.left = Math.random() * 100 + 'vw';
+                conf.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                conf.style.backgroundColor = ['#ff4d6d', '#00ffcc', '#ffd700', '#ffb6c1', '#ffffff'][Math.floor(Math.random() * 5)];
+                document.getElementById('receiver-view').appendChild(conf);
+                setTimeout(() => conf.remove(), 4000);
+            }
+        }
+    </script>
+</body>
+</html>
