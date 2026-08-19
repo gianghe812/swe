@@ -1,0 +1,15 @@
+window.onload = function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const encodedData = urlParams.get('data');
+
+    if (encodedData) {
+        // Giải mã dữ liệu
+        const duLieu = JSON.parse(decodeURIComponent(atob(encodedData)));
+
+        console.log("Lời nhắn:", duLieu.msg);
+        console.log("Giao diện:", duLieu.theme);
+        
+        // Hiển thị lời nhắn lên giao diện
+        document.getElementById('noi-dung').innerText = duLieu.msg;
+    }
+};
